@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: taskflow_test
+          MYSQL_USER: taskflow
+          MYSQL_PASSWORD: taskflow
+          MYSQL_ROOT_PASSWORD: root
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -proot"
+          --health-interval=5s --health-timeout=3s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: true
+      - name: Download dependencies
+        run: go mod download
+      - name: Unit tests with race detector
+        run: go test -race ./...
+      - name: Static analysis
+        run: go vet ./...
+      - name: SQL report integration test
+        env:
+          TEST_DATABASE_DSN: taskflow:taskflow@tcp(127.0.0.1:3306)/taskflow_test?parseTime=true&charset=utf8mb4
+        run: go test -tags=integration -count=1 ./tests/integration/...
